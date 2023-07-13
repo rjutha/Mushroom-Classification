@@ -1,0 +1,193 @@
+---
+title: "Mushroom Classification"
+author: "Rahim Jutha"
+date: "2023-07-13"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(cowplot)
+library(janitor)
+```
+
+```{r}
+mushrooms <- read_csv('mushrooms.csv') %>% clean_names()
+```
+
+```{r}
+mushroom %>% glimpse()
+```
+
+```{r}
+mushrooms_df <-
+  mushrooms %>%
+  mutate(
+    class = case_when(
+      class == "p" ~ "poisonous", 
+      class == "e" ~ "edible"),
+    cap_shape = case_when(
+      cap_shape == 'b' ~ 'bell',
+      cap_shape == 'c' ~ 'conical',
+      cap_shape == 'x' ~ 'convex',
+      cap_shape == 'f' ~ 'flat',
+      cap_shape == 'k' ~ 'knobbed',
+      cap_shape == 's' ~ 'sunken'),
+    cap_surface = case_when(
+      cap_surface == 'f' ~ 'fibrous',
+      cap_surface == 'g' ~ 'grooves',
+      cap_surface == 'y' ~ 'scaly',
+      cap_surface == 's' ~ 'smooth'),
+    cap_color = case_when(
+      cap_color == 'n' ~ 'brown',
+      cap_color == 'b' ~ 'buff',
+      cap_color == 'c' ~ 'cinnamon',
+      cap_color == 'g' ~ 'gray',
+      cap_color == 'r' ~ 'green',
+      cap_color == 'p' ~ 'pink',
+      cap_color == 'u' ~ 'purple',
+      cap_color == 'e' ~ 'red',
+      cap_color == 'w' ~ 'white',
+      cap_color == 'y' ~ 'yellow'),
+    odor = case_when(
+      odor == 'a' ~ 'almond',
+      odor == 'l' ~ 'anise',
+      odor == 'c' ~ 'creosote',
+      odor == 'y' ~ 'fishy',
+      odor == 'f' ~ 'foul',
+      odor == 'm' ~ 'musty',
+      odor == 'n' ~ 'none',
+      odor == 'p' ~ 'pungent',
+      odor == 's' ~ 'spicy'),
+    gill_attachment = case_when(
+      gill_attachment == 'a' ~ 'attached',
+      gill_attachment == 'd' ~ 'descending',
+      gill_attachment == 'f' ~ 'free',
+      gill_attachment == 'n' ~ 'notched'),
+    gill_spacing = case_when(
+      gill_spacing == 'c' ~ 'close',
+      gill_spacing == 'w' ~ 'crowded',
+      gill_spacing == 'd' ~ 'distant'),
+    gill_size = case_when(
+      gill_size == 'b' ~ 'broad',
+      gill_size == 'n' ~ 'narrow'),
+    gill_color = case_when(
+      gill_color == 'k' ~ 'black',
+      gill_color == 'n' ~ 'brown',
+      gill_color == 'b' ~ 'buff',
+      gill_color == 'h' ~ 'chocolate',
+      gill_color == 'g' ~ 'gray',
+      gill_color == 'r' ~ 'green',
+      gill_color == 'o' ~ 'orange',
+      gill_color == 'p' ~ 'pink',
+      gill_color == 'u' ~ 'purple',
+      gill_color == 'e' ~ 'red',
+      gill_color == 'w' ~ 'white',
+      gill_color == 'y' ~ 'yellow'),
+    stalk_shape = case_when(
+      stalk_shape == 'e' ~ 'enlarging',
+      stalk_shape == 't' ~ 'tapering'),
+    stalk_root = case_when(
+        stalk_root == 'b' ~ 'bulbous',
+        stalk_root == 'c' ~ 'club',
+        stalk_root == 'u' ~ 'cup',
+        stalk_root == 'e' ~ 'equal',
+        stalk_root == 'z' ~ 'rhizomorphs',
+        stalk_root == 'r' ~ 'rooted',
+        stalk_root == '?' ~ 'missing'),
+    stalk_surface_above_ring = case_when(
+      stalk_surface_above_ring == 'f' ~ 'fibrous',
+      stalk_surface_above_ring == 'y' ~ 'scaly',
+      stalk_surface_above_ring == 'k' ~ 'silky',
+      stalk_surface_above_ring == 's' ~ 'smooth'),
+    stalk_surface_below_ring = case_when(
+      stalk_surface_below_ring == 'f' ~ 'fibrous',
+      stalk_surface_below_ring == 'y' ~ 'scaly',
+      stalk_surface_below_ring == 'k' ~ 'silky',
+      stalk_surface_below_ring == 's' ~ 'smooth'),
+      stalk_color_above_ring = case_when(
+      stalk_color_above_ring == 'n' ~ 'brown',
+      stalk_color_above_ring == 'b' ~ 'buff',
+      stalk_color_above_ring == 'c' ~ 'cinnamon',
+      stalk_color_above_ring == 'g' ~ 'gray',
+      stalk_color_above_ring == 'o' ~ 'orange',
+      stalk_color_above_ring == 'p' ~ 'pink',
+      stalk_color_above_ring == 'e' ~ 'red',
+      stalk_color_above_ring == 'w' ~ 'white',
+      stalk_color_above_ring == 'y' ~ 'yellow'),
+    stalk_color_below_ring = case_when(
+      stalk_color_below_ring == 'n' ~ 'brown',
+      stalk_color_below_ring == 'b' ~ 'buff',
+      stalk_color_below_ring == 'c' ~ 'cinnamon',
+      stalk_color_below_ring == 'g' ~ 'gray',
+      stalk_color_below_ring == 'o' ~ 'orange',
+      stalk_color_below_ring == 'p' ~ 'pink',
+      stalk_color_below_ring == 'e' ~ 'red',
+      stalk_color_below_ring == 'w' ~ 'white',
+      stalk_color_below_ring == 'y' ~ 'yellow'),
+    veil_type = case_when(
+      veil_type == 'p' ~ 'partial',
+      veil_type == 'u' ~ 'univeral'),
+    veil_color = case_when(
+      veil_color == 'n' ~ 'brown',
+      veil_color == 'o' ~ 'orange',
+      veil_color == 'w' ~ 'white',
+      veil_color == 'y' ~ 'yellow'),
+    ring_number = case_when(
+      ring_number == 'n' ~ 'none',
+      ring_number == 'o' ~ 'one',
+      ring_number == 't' ~ 'two'),
+    ring_type = case_when(
+      ring_type == 'c' ~ 'cobwebby',
+      ring_type == 'e' ~ 'evanescent',
+      ring_type == 'f' ~ 'flaring',
+      ring_type == 'l' ~ 'large',
+      ring_type == 'n' ~ 'none',
+      ring_type == 'p' ~ 'pendent',
+      ring_type == 's' ~ 'sheathing',
+      ring_type == 'z' ~ 'zone'),
+    spore_print_color = case_when(
+      spore_print_color == 'k' ~ 'black',
+      spore_print_color == 'n' ~ 'brown',
+      spore_print_color == 'b' ~ 'buff',
+      spore_print_color == 'h' ~ 'chocolate',
+      spore_print_color == 'r' ~ 'green',
+      spore_print_color == 'o' ~ 'orange',
+      spore_print_color == 'u' ~ 'purple',
+      spore_print_color == 'w' ~ 'white',
+      spore_print_color == 'y' ~ 'yellow'),
+    population = case_when(
+      population == 'a' ~ 'abundent',
+      population == 'c' ~ 'clustered',
+      population == 'n' ~ 'numerous',
+      population == 's' ~ 'scattered',
+      population == 'v' ~ 'several',
+      population == 'y' ~ 'solitary'),
+    habitat = case_when(
+      habitat == 'g' ~ 'grasses',
+      habitat == 'l' ~ 'leaves',
+      habitat == 'm' ~ 'meadows',
+      habitat == 'p' ~ 'paths',
+      habitat == 'u' ~ 'urban',
+      habitat == 'w' ~ 'waste',
+      habitat == 'd' ~ 'woods')
+  )
+```
+
+
+
+# EDA
+
+```{r}
+mushrooms_df %>%
+  ggplot(aes(x = bruises, fill = class)) +
+  facet_grid(~population) +
+  geom_bar()
+
+mushrooms_df %>%
+  ggplot(aes(x = bruises, fill = class)) +
+  geom_bar() +
+  theme_minimal()
+
+```
