@@ -5,20 +5,35 @@ date: "2023-07-13"
 output: html_document
 ---
 
+# Introduction
+
+Let's build a classification model for predicting the whether a mushroom is poisonous or edible based on a plethora of qualitative variables.
+
+Using the UCI Machine Learning dataset downloaded from [kaggle](https://www.kaggle.com/datasets/uciml/mushroom-classification) we can look at which characteristics of mushrooms are poisonous and which are palatable. The goal of this analysis is to not only figure out which features are important but also to have high accuracy model since classifying wrong could spell death. 
+
+# Load Dependencies
+
 ```{r}
 library(tidyverse)
 library(tidymodels)
 library(cowplot)
 library(janitor)
+library(ggfittext)
+library(rcartocolor)
 ```
+
+# Load the Data
 
 ```{r}
 mushrooms <- read_csv('mushrooms.csv') %>% clean_names()
+
+mushrooms %>% glimpse()
+
+mushrooms %>% distinct() %>% nrow()
+mushrooms %>% is.na() %>% sum()
 ```
 
-```{r}
-mushroom %>% glimpse()
-```
+Here we can see that we 23 different columns and 8124 observations. We have 0 repeating observations as well as 0 missing values which is ideal. However, all of our data is encoding is assigned to different letters representing factors which can be confusing when working with this data for the first time. As an example, the value 'e' in cap_color corresponds to the color red. For clarity, I will replace these characters with the corresponding factor names which will also enhance any data visualizations I make in the future.
 
 ```{r}
 mushrooms_df <-
@@ -50,6 +65,10 @@ mushrooms_df <-
       cap_color == 'e' ~ 'red',
       cap_color == 'w' ~ 'white',
       cap_color == 'y' ~ 'yellow'),
+    bruises = case_when(
+      bruises == TRUE ~ 'yes',
+      bruises == FALSE ~ 'no'
+    ),
     odor = case_when(
       odor == 'a' ~ 'almond',
       odor == 'l' ~ 'anise',
@@ -173,11 +192,50 @@ mushrooms_df <-
       habitat == 'w' ~ 'waste',
       habitat == 'd' ~ 'woods')
   )
+
+mushrooms_df %>% glimpse()
 ```
 
-
-
 # EDA
+
+## First Guesses
+
+Let's take a look at a couple of the variables that could be important. As someone who doesn't pick mushrooms, my best guesses for which features are important are
+
+- Bruises - Indicates whether the mushroom has bruises or not
+- Population - Describes the population of mushrooms
+- Habitat - Specifies the habitat where the mushroom is found
+- Odor - Describes the odor of the mushroom
+
+```{r}
+plot_individual_vars <- function(df, var){
+  df %>%
+    group_by(class, .data[[var]]) %>%
+    summarise(prop_var_class = n()) %>%
+    ungroup() %>%
+    group_by(.data[[var]]) %>%
+    mutate(prop_var = sum(prop_var_class)) %>%
+    ungroup() %>%
+    mutate(percent = prop_var_class / prop_var) %>%
+    ggplot(aes(x = prop_var_class, y = fct_reorder(.data[[var]], prop_var),
+               fill = class, label = percent %>%  percent(accuracy = 1))) +
+    geom_col(position = 'stack') +
+    geom_bar_text(position = "stack", place = 'center', reflow = TRUE, contrast = TRUE) +
+    theme_minimal_vgrid() +
+    labs(
+      title = paste("Exploring the", var, "feature."),
+      x = 'Frequency',
+      y = NULL
+    ) +
+    scale_fill_carto_d(name = "class",
+                           type = "diverging", palette = "Earth", direction = -1)
+}
+
+plot_individual_vars(mushrooms_df, "bruises")
+plot_individual_vars(mushrooms_df, "population")
+plot_individual_vars(mushrooms_df, "habitat")
+plot_individual_vars(mushrooms_df, "odor")
+```
 
 ```{r}
 mushrooms_df %>%
@@ -186,8 +244,8 @@ mushrooms_df %>%
   geom_bar()
 
 mushrooms_df %>%
-  ggplot(aes(x = bruises, fill = class)) +
+  ggplot(aes(x = odor, fill = class)) +
+  facet_grid(~habitat) +
   geom_bar() +
-  theme_minimal()
-
+  coord_flip()
 ```
