@@ -16,10 +16,12 @@ Using the UCI Machine Learning dataset downloaded from [kaggle](https://www.kagg
 ```{r}
 library(tidyverse)
 library(tidymodels)
+library(skimr)
 library(cowplot)
 library(janitor)
 library(ggfittext)
 library(rcartocolor)
+library(patchwork)
 ```
 
 # Load the Data
@@ -27,10 +29,8 @@ library(rcartocolor)
 ```{r}
 mushrooms <- read_csv('mushrooms.csv') %>% clean_names()
 
-mushrooms %>% glimpse()
-
-mushrooms %>% distinct() %>% nrow()
-mushrooms %>% is.na() %>% sum()
+glimpse(mushrooms)
+skim(mushrooms)
 ```
 
 Here we can see that we 23 different columns and 8124 observations. We have 0 repeating observations as well as 0 missing values which is ideal. However, all of our data is encoding is assigned to different letters representing factors which can be confusing when working with this data for the first time. As an example, the value 'e' in cap_color corresponds to the color red. For clarity, I will replace these characters with the corresponding factor names which will also enhance any data visualizations I make in the future.
@@ -191,7 +191,8 @@ mushrooms_df <-
       habitat == 'u' ~ 'urban',
       habitat == 'w' ~ 'waste',
       habitat == 'd' ~ 'woods')
-  )
+  ) %>%
+  mutate_if(is.character, as_factor)
 
 mushrooms_df %>% glimpse()
 ```
@@ -207,8 +208,10 @@ Let's take a look at a couple of the variables that could be important. As someo
 - Habitat - Specifies the habitat where the mushroom is found
 - Odor - Describes the odor of the mushroom
 
+### Single-Variables
+
 ```{r}
-plot_individual_vars <- function(df, var){
+plot_one_vars <- function(df, var){
   df %>%
     group_by(class, .data[[var]]) %>%
     summarise(prop_var_class = n()) %>%
@@ -222,30 +225,214 @@ plot_individual_vars <- function(df, var){
     geom_col(position = 'stack') +
     geom_bar_text(position = "stack", place = 'center', reflow = TRUE, contrast = TRUE) +
     theme_minimal_vgrid() +
+    theme(
+      legend.position = "bottom",
+      plot.title.position = "plot"
+    ) +
     labs(
       title = paste("Exploring the", var, "feature."),
       x = 'Frequency',
       y = NULL
     ) +
-    scale_fill_carto_d(name = "class",
+    scale_fill_carto_d(name = NULL,
                            type = "diverging", palette = "Earth", direction = -1)
 }
-
-plot_individual_vars(mushrooms_df, "bruises")
-plot_individual_vars(mushrooms_df, "population")
-plot_individual_vars(mushrooms_df, "habitat")
-plot_individual_vars(mushrooms_df, "odor")
+ 
+plot_one_vars(mushrooms_df, "bruises") + 
+  plot_one_vars(mushrooms_df, "population") +
+  plot_one_vars(mushrooms_df, "habitat") +
+  plot_one_vars(mushrooms_df, "odor")
 ```
+
+Some interesting take aways from these plots:
+
+- If a mushroom has bruises theres a higher chance that it's an edible and not poisonous. My though process is that
+perhaps poisonous don't have bruise and blemish because animals and insects avoid them.
+- The more abundent and clustered mushrooms are the more likely they're edible. It appears that when they are solitary or several mushrooms together there is a high chance of them being poisonous.
+- It appears that mushrooms found in woods and grasses have a fair chance of being edible or poisonous. It also looks like mushrooms found on paths or urban areas or very likely to be poisonous.
+- If a mushroom displays no odor there is a high chance that it is edible. Whereas, if it smells foul, spicy, or musty it is a high chance of it being poisonous.
+
+### Interactions between variables
 
 ```{r}
-mushrooms_df %>%
-  ggplot(aes(x = bruises, fill = class)) +
-  facet_grid(~population) +
-  geom_bar()
-
-mushrooms_df %>%
-  ggplot(aes(x = odor, fill = class)) +
-  facet_grid(~habitat) +
-  geom_bar() +
-  coord_flip()
+plot_two_vars <- function(df, var, facet_var){
+  df %>%
+    group_by(class, .data[[var]], .data[[facet_var]]) %>%
+    summarise(prop_var_class = n()) %>%
+    ungroup() %>%
+    group_by(.data[[var]]) %>%
+    mutate(prop_var = sum(prop_var_class)) %>%
+    ungroup() %>%
+    ggplot(aes(x = prop_var_class, y = fct_reorder(.data[[var]], prop_var),
+               fill = class)) +
+    geom_col(position = 'stack') +
+    facet_wrap(~.data[[facet_var]]) +
+    theme_minimal_vgrid() +
+    theme(
+      legend.position = "bottom",
+      plot.title.position = "plot"
+    ) +
+    labs(
+      title = paste0("Exploring the ", var, " feature faceted by ", facet_var, "."),
+      x = 'Frequency',
+      y = NULL
+    ) +
+    scale_fill_carto_d(name = NULL,
+                           type = "diverging", palette = "Earth", direction = -1)
+}
 ```
+
+### Interaction between odor and habitat
+
+```{r}
+plot_two_vars(mushrooms_df, "odor", "habitat")
+```
+
+### Interaction between bruises and odor
+```{r}
+plot_two_vars(mushrooms_df, "bruises", "odor")
+```
+
+### Interaction between habitat and population
+```{r}
+plot_two_vars(mushrooms_df, "habitat", "population")
+```
+
+Some interesting take aways from these plots:
+
+- If a mushroom is odorless and in the woods there is an extremely high chance that it is edible. This is an interesting observation since 40% of mushrooms in the woods are poisonous in the data. There is a similar observation made about mushrooms found in grasses.
+- If a mushroom is odorless there is an extremely high chance that it is edible regardless of whether it has bruises or not. This is an interesting observation since 68& of mushrooms without bruises were poisonous.
+- Regardless of what habitat you find a mushroom, if there are several then it is very likely to be poisonous.
+
+## Using Domain Knowledge
+
+Using the articles ["How to Tell the Difference Between Poisonous and Edible Mushrooms"](https://www.wildfooduk.com/articles/how-to-tell-the-difference-between-poisonous-and-edible-mushrooms/)and ["How to identify Poisonous Mushrooms"](https://sciencing.com/identify-poisonous-mushrooms-2057768.html), we can find out which characteristics are common of poisonous and edible mushrooms. Let's see if these rules are consistent with our data.
+
+### Avoid mushrooms with red on the cap. Mushrooms with a red color on the cap are either poisonous or strongly hallucinogenic.
+
+```{r}
+plot_one_vars(mushrooms_df, "cap_color")
+```
+This rule is definetly true for the mushroom cap color. It appears that cap color isn't a strong enough characteristic to outright claim whether a mushroom is poisonous or not. However we do see that white capped mushrooms are commonly less poisonous.
+
+### You can also get information by cutting off the stem and placing the cap on a piece of paper gill-side down for a few hours to get a spore print. A white spore print is a telltale sign of an Amanita species.
+
+```{r}
+plot_one_vars(mushrooms_df, "spore_print_color")
+```
+
+This rule is corresponds well with the data. we see that if the spore print color is white there is 76% chance of it being poisonous based on our data. It'as also interesting to see that if the color is brown or block there is a high chance of the mushroom being safe.
+
+### Poisonous mushrooms often have an unpleasant, acrid smell, while benign ones smell refreshingly mushroomlike.
+
+```{r}
+plot_one_vars(mushrooms_df, "odor")
+```
+
+We've observed this before however its good to no that odor is a very strong characteristic for identifying poisonous mushrooms.
+
+## Summary
+
+Based on the EDA conducted I expect that bruises, odor, population, and spore print color will be strong features in predicting whether a mushroom is poisonous or edible. I think variables like habitat and cap color aren't the strongest on their own but with an interaction of another variable may also be very informative. Keep in mind that I only looked at a third of the variables we have in the data. We can use model outputs to see which variables are important for classification.
+
+# Building a model.
+
+Now that we've taken a look at some of the variables present in our data, let's try to fit a Random Forest Model and see how well it performs. I chose Random Forest because it doesn't require any pre-processing and 
+
+## Split the data for Bootstrapping
+
+We split the data into training and testing so that we can validate the model we build against an independent sample of data. This allows us to avoid over-fitting the model and simulate trying to predict new data. 
+```{r}
+set.seed(123)
+mushrooms_split <- initial_split(mushrooms_df, strata = class)
+mushrooms_train <- training(mushrooms_split)
+mushrooms_test <- testing(mushrooms_split)
+
+set.seed(234)
+mushrooms_boot <- bootstraps(mushrooms_train)
+```
+
+## Define model and engine
+
+As mentioned above we define the model to be a random forest model. We set the mode to classification and set the engine to ranger which is generally a faster implementation of the the random forest model. We turn on the importance parameter which will help us determine which variables are important. The 'impurity' measure is the Gini index for classification.
+
+```{r}
+rf_spec <- rand_forest() %>%
+  set_mode("classification") %>%
+  set_engine("ranger", importance = "impurity")
+```
+
+## Define workflow
+
+Here we define the workflow. Since we aren't doing any pre-processing, the workflow is very short. The only thing we do here is tell the model that we are going to use all the variables to predict whether a mushroom is poisonous or edible.
+
+```{r}
+mushrooms_wf <- workflow() %>%
+  add_formula(class ~ .)
+```
+
+## Run the model
+
+Here we run the model using our training set with bootstrap resampling.
+```{r}
+rf_rs <- mushrooms_wf %>%
+  add_model(rf_spec) %>%
+  fit_resamples(
+    resamples = mushrooms_boot,
+    control = control_resamples(save_pred = TRUE, verbose = FALSE)
+  )
+```
+
+## View Results
+
+### View model parameters
+
+```{r}
+collect_metrics(rf_rs, summarize = TRUE)
+```
+
+### View confusion matrix
+
+```{r}
+rf_rs %>%
+  conf_mat_resampled()
+```
+
+### View ROC Curves
+```{r}
+rf_rs %>%
+  collect_predictions() %>%
+  group_by(id) %>%
+  roc_curve(class, .pred_poisonous) %>%
+  ggplot(aes(x = 1- specificity, y = sensitivity, color = id)) +
+  geom_abline(lty = 2, color = 'grey80', size = 1.5) +
+  geom_path(show.legend = T, alpha = 0.6, size = 1.2) +
+  coord_equal()
+```
+
+### Run the model against the testing set
+```{r}
+mushrooms_final <- mushrooms_wf %>%
+  add_model(rf_spec) %>%
+  last_fit(mushrooms_split)
+
+mushrooms_final$.workflow[[1]]
+```
+
+### Extract variable importance from final model
+
+```{r}
+extract_fit_parsnip(mushrooms_final$.workflow[[1]]) %>%
+  vip::vi()
+
+mushrooms_final %>% 
+  extract_fit_parsnip() %>% 
+  vip::vip(num_features = 20)
+
+mushrooms_final %>% 
+  collect_predictions() %>% 
+  roc_curve(class, .pred_poisonous) %>% 
+  autoplot()
+```
+
+How well it splits the data.
